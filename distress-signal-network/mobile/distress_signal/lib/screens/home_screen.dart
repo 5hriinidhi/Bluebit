@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/shake_detector.dart';
 import '../services/sonic_cascade.dart';
@@ -14,7 +15,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _connected = false;
   String _locationText = 'Fetching location...';
   double? _lat;
@@ -23,10 +24,16 @@ class _HomeScreenState extends State<HomeScreen> {
   String _lastStatus = 'Idle';
   Timer? _healthTimer;
   late ShakeDetector _shakeDetector;
+  int? _lastSosId;
+  String? _replyingStatus;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Load persisted SOS ID
+    _loadPersistedSosId();
     // 1. Initialize and Start Background Service
     _initForegroundTask().then((_) => _startService());
     
@@ -45,11 +52,31 @@ class _HomeScreenState extends State<HomeScreen> {
     _shakeDetector.startListening();
   }
 
+  Future<void> _loadPersistedSosId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedId = prefs.getInt('last_sos_id');
+      if (savedId != null && mounted) {
+        setState(() => _lastSosId = savedId);
+      }
+    } catch (e) {
+      print('Failed to load SOS ID: $e');
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _healthTimer?.cancel();
     _shakeDetector.stopListening();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkConnection(); // Re-validate connectivity on resume
+    }
   }
 
   Future<void> _initForegroundTask() async {
@@ -142,13 +169,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ? Config.zeroTouchMessage 
           : 'Emergency SOS triggered manually';
 
-      await ApiService.submitSos(
+      final response = await ApiService.submitSos(
         lat: _lat ?? 0.0,
         lng: _lng ?? 0.0,
         message: msg,
         source: source,
         metadata: metadata,
       );
+      
+      if (response.containsKey('id')) {
+        _lastSosId = response['id'];
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('last_sos_id', _lastSosId!);
+      }
       
       setState(() => _lastStatus = 'Success: $source sent');
       if (mounted) {
@@ -170,6 +203,51 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onDevButtonPress() {
     _triggerSos(Config.sourceZeroTouch, metadata: {'dev_triggered': true});
+  }
+
+  Widget _replyBtn(String label, Color color, String status) {
+    final isLoading = _replyingStatus == status;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+          onPressed: (_lastSosId == null || _replyingStatus != null) ? null : () async {
+            setState(() => _replyingStatus = status);
+            try {
+              final success = await ApiService.post('/api/status', {
+                'sos_id': _lastSosId,
+                'status': status,
+              });
+              if (mounted && success != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Sent: $label Status Reported"), backgroundColor: color),
+                );
+              } else if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Failed to send status"), backgroundColor: Colors.grey),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Error: $e"), backgroundColor: Colors.grey),
+                );
+              }
+            } finally {
+              if (mounted) setState(() => _replyingStatus = null);
+            }
+          },
+          child: isLoading
+              ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+        ),
+      ),
+    );
   }
 
   @override
@@ -231,6 +309,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const Spacer(),
+            if (_lastSosId != null) ...[
+              const Text("ARE YOU SAFE?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _replyBtn('SAFE', Colors.green, 'safe'),
+                  _replyBtn('RESCUE', Colors.orange, 'need_rescue'),
+                  _replyBtn('MEDICAL', Colors.red, 'medical'),
+                ],
+              ),
+              const SizedBox(height: 30),
+            ],
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

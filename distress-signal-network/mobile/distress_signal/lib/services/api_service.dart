@@ -41,4 +41,21 @@ class ApiService {
       .timeout(const Duration(seconds: 5));
     return jsonDecode(resp.body);
   }
+
+  // Generic POST for /api/status etc.
+  static Future<Map<String,dynamic>?> post(String endpoint, Map<String,dynamic> body) async {
+    try {
+      final resp = await _client
+        .post(Uri.parse('$_base$endpoint'),
+              headers: {'Content-Type':'application/json'},
+              body: jsonEncode(body))
+        .timeout(const Duration(seconds: Config.apiTimeoutSeconds));
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        return jsonDecode(resp.body);
+      }
+    } catch (e) {
+      print('ApiService.post failed: $e');
+    }
+    return null;
+  }
 }
