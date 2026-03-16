@@ -10,3 +10,5 @@ feedparser
 transformers
 torch
 requests
+spacy
+geopy

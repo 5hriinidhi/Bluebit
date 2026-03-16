@@ -24,11 +24,13 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from distress_ai.config import settings
 from distress_ai.monitor import monitor_loop, stop_monitor
 from distress_ai.subscriber import start_subscriber, stop_subscriber
 from distress_ai.solver import optimise_route, MAX_WAYPOINTS
+from distress_ai.monitor.collectors import _source_health
 
 # ── Logging ─────────────────────────────────────────────
 
@@ -150,6 +152,31 @@ async def health():
 @app.get("/", tags=["ops"])
 async def root():
     return {"message": "DIST.RESS AI / NLP Service is running."}
+
+
+# ── Source health models + endpoint (Prompt G) ──────────
+
+class SourceEntry(BaseModel):
+    name: str
+    status: str
+    last_poll: str | None
+    consecutive_failures: int
+
+class SourceStatusResponse(BaseModel):
+    sources: list[SourceEntry]
+    total_active: int
+
+
+@app.get("/sources/status", tags=["ops"])
+async def sources_status():
+    entries = [
+        SourceEntry(name=name, **health)
+        for name, health in _source_health.items()
+    ]
+    return SourceStatusResponse(
+        sources=entries,
+        total_active=sum(1 for e in entries if e.status == "ok"),
+    )
 
 
 # ── OR-Tools TSP Route Optimisation ─────────────────────

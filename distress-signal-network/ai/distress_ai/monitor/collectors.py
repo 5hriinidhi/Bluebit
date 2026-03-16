@@ -5,7 +5,51 @@ import re
 import datetime
 from typing import List, Dict, Set
 
+from geopy.geocoders import Nominatim
+
 logger = logging.getLogger("distress.collectors")
+
+# ── Keyword-based location extraction (faster & more reliable than spaCy NER) ──
+
+KNOWN_LOCATIONS = [
+    "india", "mumbai", "delhi", "pune", "chennai", "kolkata",
+    "nepal", "kathmandu", "pakistan", "karachi", "lahore",
+    "bangladesh", "dhaka", "sri lanka", "colombo",
+    "afghanistan", "kabul", "iran", "turkey", "japan", "tokyo",
+    "indonesia", "jakarta", "philippines", "manila",
+    "china", "beijing", "thailand", "bangkok", "myanmar",
+    "vietnam", "malaysia", "singapore", "south korea", "seoul",
+    "australia", "sydney", "new zealand", "fiji",
+    "usa", "california", "texas", "florida", "new york",
+    "mexico", "brazil", "chile", "peru", "ecuador",
+    "morocco", "libya", "nigeria", "kenya", "south africa",
+    "ukraine", "italy", "greece", "spain", "iceland",
+]
+
+_geo = Nominatim(user_agent="distress-intel/1.0")
+
+
+def extract_location(text: str) -> dict:
+    """Scan text for known location names and geocode the first match via Nominatim."""
+    text_lower = text.lower()
+    for place in KNOWN_LOCATIONS:
+        if place in text_lower:
+            try:
+                loc = _geo.geocode(place, timeout=5)
+                if loc:
+                    print(f"[GEO] Found: {place} → {loc.latitude}, {loc.longitude}")
+                    return {
+                        "lat": loc.latitude,
+                        "lng": loc.longitude,
+                        "location_name": place.title(),
+                    }
+            except Exception as e:
+                print(f"[GEO] Failed for {place}: {e}")
+    return {
+        "lat": 18.5204,
+        "lng": 73.8567,
+        "location_name": "Unknown (defaulting to Pune)",
+    }
 
 # Use the username provided by the user
 REDDIT_HEADERS = {

@@ -31,168 +31,112 @@ from distress_ai.config import settings
 from distress_ai.models import AlertPayload
 from distress_ai.routing import post_alert_trigger
 from distress_ai.subscriber import is_on_cooldown
-from .collectors import RedditCollector, REDDIT_SUBREDDITS
+from distress_ai.monitor.collectors import fetch_all_platforms, _reddit
+from distress_ai.monitor.bart_classifier import classify_post
 
 logger = logging.getLogger("distress.monitor")
-collector = RedditCollector()
-
-# ── Threat keyword dictionaries ─────────────────────────
-# Map each threat type enum to detection keywords.
-
-_THREAT_KEYWORDS: Dict[str, Set[str]] = {
-    "earthquake": {
-        "earthquake", "tremor", "seismic", "quake",
-        "buildings shaking", "richter",
-    },
-    "flood": {
-        "flood", "flooding", "submerged", "water level",
-        "dam breach", "inundation", "waterlogged",
-    },
-    "blast": {
-        "blast", "bomb", "explosion", "detonation",
-        "explosive", "ied", "shrapnel",
-    },
-    "fire": {
-        "fire", "blaze", "inferno", "wildfire",
-        "smoke", "burning", "flames", "arson",
-    },
-    "stampede": {
-        "stampede", "crowd crush", "crowd surge",
-        "crowd panic", "trampled", "overcrowding",
-    },
-}
-
-# ── Simulated threat scenarios (synthetic feed) ─────────
-
-_SIMULATED_POSTS: List[Dict] = [
-    {"text": "Beautiful sunset at the park today",
-     "lat": 18.52, "lng": 73.86},
-    {"text": "Major earthquake tremors felt across the city, buildings shaking violently",
-     "lat": 12.95, "lng": 77.58},
-    {"text": "Traffic is terrible on MG Road as usual",
-     "lat": 12.97, "lng": 77.62},
-    {"text": "BREAKING: Reports of severe flooding in low-lying areas, water level rising fast",
-     "lat": 13.01, "lng": 77.55},
-    {"text": "New cafe opened on Church Street, great coffee!",
-     "lat": 12.98, "lng": 77.60},
-    {"text": "Massive explosion heard near the industrial area, blast shattered windows",
-     "lat": 12.92, "lng": 77.60},
-    {"text": "My dog is so cute",
-     "lat": 18.50, "lng": 73.85},
-    {"text": "URGENT: Fire spreading rapidly through the warehouse district, thick smoke visible",
-     "lat": 19.08, "lng": 72.88},
-    {"text": "Enjoying the cricket match at Chinnaswamy",
-     "lat": 12.98, "lng": 77.60},
-    {"text": "Crowd stampede reported at concert venue, people trampled and injured",
-     "lat": 28.61, "lng": 77.21},
-]
-
-
-# ── Threat scoring ──────────────────────────────────────
-
-def _score_post(text: str) -> Tuple[str, float, List[str]]:
-    """
-    Score a post for threat level.
-    Returns (threat_type, confidence, matched_keywords).
-    """
-    lower = text.lower()
-    best_type = "unknown"
-    best_score = 0.0
-    best_kws: List[str] = []
-
-    for threat_type, keywords in _THREAT_KEYWORDS.items():
-        matched = [kw for kw in keywords if kw in lower]
-        if not matched:
-            continue
-        # base confidence + boost for multiple keyword hits
-        score = 0.70 + min(len(matched), 4) * 0.07
-        # urgency signals
-        if any(w in lower for w in ("breaking", "urgent", "emergency", "massive")):
-            score += 0.05
-        caps_ratio = sum(1 for c in text if c.isupper()) / max(len(text), 1)
-        if caps_ratio > 0.4:
-            score += 0.03
-        score = min(score, 1.0)
-
-        if score > best_score:
-            best_score = score
-            best_type = threat_type
-            best_kws = matched
-
-    return best_type, round(best_score, 4), best_kws
 
 
 # ── Background monitor loop ────────────────────────────
 
 _running = False
 
+# Demo seed posts — always included in every poll cycle
+DEMO_POSTS = [
+    {
+        "id": "demo_001",
+        "platform": "reddit",
+        "text": "BREAKING: Major earthquake hits Kathmandu Nepal, buildings collapsed, people trapped under debris",
+        "url": "https://reddit.com/r/worldnews",
+        "created_utc": 0.0,
+    },
+    {
+        "id": "demo_002", 
+        "platform": "reddit",
+        "text": "Massive flooding reported in Mumbai India, thousands evacuated from low lying areas",
+        "url": "https://reddit.com/r/news",
+        "created_utc": 0.0,
+    },
+    {
+        "id": "demo_003",
+        "platform": "reddit", 
+        "text": "Explosion blast reported near Pune railway station, emergency services on site",
+        "url": "https://reddit.com/r/india",
+        "created_utc": 0.0,
+    },
+]
+
+_demo_index = 0  # cycles through demo posts one at a time
+
 
 async def monitor_loop() -> None:
     """
-    Async background task: polls Reddit at the configured
-    interval and fires POST /api/alert/trigger when confidence >= 0.85.
+    Async background task: polls cross-platform social feeds at the configured
+    interval and fires POST /api/alert/trigger when is_threat is True.
     """
-    global _running
+    global _running, _demo_index
     _running = True
     logger.info(
-        "[INIT]  Reddit monitor started (subs: %s, poll %ds, threshold %.2f)",
-        ", ".join(REDDIT_SUBREDDITS),
+        "[INIT]  Social monitor started (Reddit/Mastodon/Bluesky, poll %ds, threshold %.2f)",
         settings.monitor_interval_seconds,
         settings.alert_confidence_threshold,
     )
 
-    # --- 24h Backfill / Demo Mode ---
-    logger.info("[INIT]  Starting 24h backfill...")
-    backfill_posts = collector.fetch_backfill_24h()
-    for post in backfill_posts:
-        await _process_post(post)
-    logger.info("[INIT]  Backfill complete.")
+    # weather_boost will be imported in Prompt F — leave a comment here for now:
+    # from .weather_boost import _cached_boost  # added in Prompt F
 
     while _running:
         try:
-            # Fetch latest from Reddit
-            batch = collector.fetch_latest(limit=5)
+            posts = fetch_all_platforms()
 
-            for post in batch:
-                await _process_post(post)
+            # Inject one demo post per cycle so demo always has something to show
+            demo_post = DEMO_POSTS[_demo_index % len(DEMO_POSTS)]
+            _demo_index += 1
+            posts.insert(0, demo_post)  # put it first so it classifies first
+
+            if not posts:
+                logger.info("[MONITOR] No new posts this cycle")
+                await asyncio.sleep(settings.monitor_interval_seconds)
+                continue
+
+            for post in posts:
+                result = classify_post(post["text"])
+                if not result["is_threat"]:
+                    continue
+
+                threat_type = result["threat_type"]
+                final_confidence = result["confidence"]
+
+                # weather_boost will be added here in Prompt F:
+                # final_confidence = min(0.99, final_confidence + _cached_boost)
+
+                print(f"[MONITOR] {post.get('platform', 'unknown')} | {threat_type} | {final_confidence:.3f} | {post.get('url', '')}")
+
+                if is_on_cooldown(threat_type):
+                    print(f"[MONITOR] Cooldown active for {threat_type}, skipping")
+                    continue
+
+                if final_confidence >= settings.alert_confidence_threshold:
+                    logger.warning(
+                        "[ALERT]  Threat detected!  type=%s  conf=%.2f  platform=%s",
+                        threat_type, final_confidence, post.get("platform", "unknown"),
+                    )
+                    payload = AlertPayload(
+                        type=threat_type,
+                        confidence=final_confidence,
+                        lat=post.get("lat", 0.0),
+                        lng=post.get("lng", 0.0),
+                        source="nlp",
+                    )
+                    await post_alert_trigger(payload)
+                else:
+                    print(f"[MONITOR] monitoring: {threat_type} at {final_confidence:.3f}")
 
         except Exception:
-            logger.exception("[FAIL]  Error in Reddit monitor cycle")
+            logger.exception("[FAIL]  Error in Social monitor cycle")
 
         await asyncio.sleep(settings.monitor_interval_seconds)
 
-
-async def _process_post(post: Dict) -> None:
-    """Helper to score and trigger alerts for a single post."""
-    threat_type, confidence, kws = _score_post(post["text"])
-
-    if confidence < settings.alert_confidence_threshold:
-        if confidence > 0:
-            logger.info(
-                "monitoring: %s at %.2f", threat_type, confidence,
-            )
-        return
-
-    # confidence >= 0.85 — check cooldown before calling backend
-    if is_on_cooldown(threat_type):
-        logger.info(
-            "[SKIP]  %s on cooldown, suppressing alert (conf=%.2f)",
-            threat_type, confidence,
-        )
-        return
-
-    logger.warning(
-        "[ALERT]  Threat detected!  type=%s  conf=%.2f  kws=%s",
-        threat_type, confidence, kws,
-    )
-    payload = AlertPayload(
-        type=threat_type,
-        confidence=confidence,
-        lat=post["lat"],
-        lng=post["lng"],
-        source="nlp",
-    )
-    await post_alert_trigger(payload)
 
 
 def stop_monitor() -> None:
