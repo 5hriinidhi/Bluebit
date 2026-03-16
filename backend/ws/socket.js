@@ -3,10 +3,11 @@ const { Server } = require('socket.io');
 let ioInstance;
 
 /**
- * Three events this backend emits:
+ * Four events this backend emits:
  *  - io.emit('new-sos', payload)        -> fired from sos.js handler
  *  - io.emit('triage-complete', payload) -> fired from sos.js triage handler
  *  - io.emit('broadcast-alert', payload) -> fired from alert.js handler
+ *  - io.emit('citizen-status', payload)  -> fired from status.js handler
  * 
  * Note: Do NOT accept any events from clients. This is a broadcast-only server.
  */
