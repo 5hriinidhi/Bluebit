@@ -74,13 +74,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _resources = res);
 
     // Task 3b: Mesh Relay Listener
-    SonicCascade.startBleRelay((lat, lng, hop, id) => ApiService.submitSos(
-      lat: lat, 
-      lng: lng, 
-      message: "Mesh Relay (Hop $hop)", 
-      source: "sonic_cascade", 
-      metadata: {'relay_id': id}
-    ));
+    SonicCascade.startBleRelay((lat, lng, hop, id) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("🚨 BLE Mesh Signal Received! Relay ID: #$id"),
+            backgroundColor: Colors.purple,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      ApiService.submitSos(
+        lat: lat, 
+        lng: lng, 
+        message: "Mesh Relay (Hop $hop)", 
+        source: "sonic_cascade", 
+        metadata: {'relay_id': id}
+      );
+    });
   }
 
   Future<void> _checkHealth() async {
@@ -371,6 +382,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           Position p = await Geolocator.getCurrentPosition(
                             desiredAccuracy: _powerSaveMode ? LocationAccuracy.low : LocationAccuracy.high
                           );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Starting BLE Mesh Broadcast..."),
+                                backgroundColor: Colors.red,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
                           SonicCascade.advertiseBleSos(p.latitude, p.longitude);
                         },
                       ),

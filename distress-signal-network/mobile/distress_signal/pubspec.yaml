@@ -24,6 +24,7 @@ dependencies:
   firebase_messaging: ^14.7.0
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
+  flutter_ble_peripheral: ^2.1.0
 
 dev_dependencies:
   flutter_test:
