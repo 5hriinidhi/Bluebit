@@ -15,6 +15,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isOnline = false;
   bool _locationEnabled = false;
   bool _isSending = false;
+  bool _powerSaveMode = false; // New state variable
   
   // Tracks which specific button is currently hitting the API
   String? _activeStatusLoading; 
@@ -93,7 +94,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _statusMessage = "Broadcasting Emergency...";
     });
     try {
-      Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      Position pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: _powerSaveMode ? LocationAccuracy.low : LocationAccuracy.high
+      );
       final res = await ApiService.submitSos(
         lat: pos.latitude, 
         lng: pos.longitude, 
@@ -197,6 +200,22 @@ class _HomeScreenState extends State<HomeScreen> {
                             ]),
                             const Divider(height: 24),
                             Row(children: [
+                              Icon(
+                                _isOnline ? Icons.cloud_done : Icons.bluetooth_searching, 
+                                color: _isOnline ? Colors.blue : Colors.orange, 
+                                size: 20
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                _isOnline ? "Mode: CLOUD (Railway)" : "Mode: MESH (BLE Active)",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold, 
+                                  color: _isOnline ? Colors.blue : Colors.orange
+                                ),
+                              ),
+                            ]),
+                            const Divider(height: 24),
+                            Row(children: [
                               const Icon(Icons.info_outline, color: Colors.blue, size: 20),
                               const SizedBox(width: 12),
                               Expanded(child: Text(_statusMessage, style: TextStyle(color: Colors.grey[800]))),
@@ -247,9 +266,21 @@ class _HomeScreenState extends State<HomeScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                         ),
                         onPressed: () async {
-                          Position p = await Geolocator.getCurrentPosition();
+                          Position p = await Geolocator.getCurrentPosition(
+                            desiredAccuracy: _powerSaveMode ? LocationAccuracy.low : LocationAccuracy.high
+                          );
                           SonicCascade.advertiseBleSos(p.latitude, p.longitude);
                         },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Battery Optimization Toggle
+                      SwitchListTile(
+                        title: const Text("Battery Optimization", style: TextStyle(fontSize: 14)),
+                        subtitle: Text(_powerSaveMode ? "GPS: Power Save (Low Freq)" : "GPS: High Accuracy"),
+                        value: _powerSaveMode,
+                        onChanged: (val) => setState(() => _powerSaveMode = val),
+                        secondary: Icon(Icons.battery_saver, color: _powerSaveMode ? Colors.green : Colors.grey),
                       ),
                       const SizedBox(height: 40),
                     ],
