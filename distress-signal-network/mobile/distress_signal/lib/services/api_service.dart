@@ -60,4 +60,16 @@ class ApiService {
       return false;
     }
   }
+
+  // Task 5D: Fetch resource locations (Shelters, Depots)
+  static Future<List<dynamic>> fetchResources() async {
+    try {
+      final response = await http.get(Uri.parse("${Config.backendUrl}/api/resources"))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
 }

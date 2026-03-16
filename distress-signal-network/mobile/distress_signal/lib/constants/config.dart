@@ -14,6 +14,13 @@ class Config {
   static const int    shakeCooldownMs      = 5000; // ms between triggers
   static const String zeroTouchMessage    = 'AUTO-SOS: Device impact detected';
 
+static const Map<int?, String> severityLabels = {
+  1: 'CRITICAL',
+  2: 'HIGH',
+  3: 'MEDIUM',
+  null: 'UNVERIFIED',
+};
+
   // Sonic Cascade frequencies (Hz)
   static const double cascadeFreq0        = 18000.0; // '0' bit = 18kHz
   static const double cascadeFreq1        = 20000.0; // '1' bit = 20kHz

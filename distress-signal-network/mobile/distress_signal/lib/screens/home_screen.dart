@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../services/sonic_cascade.dart';
 import '../services/api_service.dart';
+import '../constants/config.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +19,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _locationEnabled = false;
   bool _isSending = false;
   bool _powerSaveMode = false; // New state variable
+  List<dynamic> _resources = [];
+  Position? _currentPosition;
   
   // Tracks which specific button is currently hitting the API
   String? _activeStatusLoading; 
@@ -59,6 +64,15 @@ class _HomeScreenState extends State<HomeScreen> {
     await _checkLocationPermission();
     await _checkHealth();
     
+    // Fetch user pos for the map
+    if (_locationEnabled) {
+      _currentPosition = await Geolocator.getCurrentPosition();
+    }
+    
+    // Task 5D: Fetch resources
+    final res = await ApiService.fetchResources();
+    if (mounted) setState(() => _resources = res);
+
     // Task 3b: Mesh Relay Listener
     SonicCascade.startBleRelay((lat, lng, hop, id) => ApiService.submitSos(
       lat: lat, 
@@ -163,6 +177,29 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Task 5D: Map Marker Styling
+  Color _getResourceColor(String type) {
+    if (type.toLowerCase() == 'shelter') return const Color(0xFF00BCD4); // Cyan
+    if (type.toLowerCase() == 'depot') return const Color(0xFF9C27B0); // Purple
+    return const Color(0xFF156500); // Green/Default (Ambulance etc)
+  }
+
+  // Task 5E: Evacuation Routes
+  LatLng _getNearestSafeZone() {
+    final zones = [
+      const LatLng(18.5176, 73.8397), // Deccan Gymkhana
+      const LatLng(18.5590, 73.7877), // Baner Hills
+    ];
+    if (_currentPosition == null) return zones.first;
+    
+    final pos = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+    const distance = Distance();
+    
+    return zones.reduce((a, b) => 
+      distance.as(LengthUnit.Meter, pos, a) < distance.as(LengthUnit.Meter, pos, b) ? a : b
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -218,11 +255,76 @@ class _HomeScreenState extends State<HomeScreen> {
                             Row(children: [
                               const Icon(Icons.info_outline, color: Colors.blue, size: 20),
                               const SizedBox(width: 12),
-                              Expanded(child: Text(_statusMessage, style: TextStyle(color: Colors.grey[800]))),
+                              Expanded(child: Text(
+                                _lastSosId != null 
+                                  ? "Status: ${Config.severityLabels[null] ?? 'PENDING'} - $_statusMessage" 
+                                  : _statusMessage, 
+                                style: TextStyle(color: Colors.grey[800])
+                              )),
                             ]),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 16),
+
+                      // Task 5D: Resource Map
+                      if (_currentPosition != null)
+                        Container(
+                          height: 200,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(15),
+                            child: FlutterMap(
+                              options: MapOptions(
+                                initialCenter: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                                initialZoom: 13.0,
+                              ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                  userAgentPackageName: 'com.distress.distress_signal',
+                                ),
+                                // Task 5E: Evacuation Route (Dashed Green Polyline)
+                                PolylineLayer(
+                                  polylines: [
+                                    Polyline(
+                                      points: [
+                                        LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                                        _getNearestSafeZone()
+                                      ],
+                                      color: const Color(0xFF00E676),
+                                      strokeWidth: 4.0,
+                                      pattern: StrokePattern.dashed(segments: const [2, 2]), // Dashed line
+                                    ),
+                                  ],
+                                ),
+                                MarkerLayer(
+                                  markers: [
+                                    // Nearest Safe Zone Marker
+                                    Marker(
+                                      point: _getNearestSafeZone(),
+                                      child: const Icon(Icons.security, color: Colors.green, size: 30),
+                                    ),
+                                    // User Marker
+                                    Marker(
+                                      point: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                                      child: const Icon(Icons.person_pin_circle, color: Colors.red, size: 30),
+                                    ),
+                                    // Resource Markers
+                                    ..._resources.map((r) => Marker(
+                                      point: LatLng((r['lat'] as num).toDouble(), (r['lng'] as num).toDouble()),
+                                      child: Icon(Icons.location_on, color: _getResourceColor(r['type'] ?? ''), size: 30),
+                                    )),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 16),
                       const Spacer(),
                       
                       // Two-Way Communication Section (Task 5C)
