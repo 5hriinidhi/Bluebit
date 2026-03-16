@@ -58,6 +58,35 @@ router.post('/trigger', async (req, res) => {
         const alert_id = alertRecord.id;
         const triggered_at = alertRecord.triggered_at;
 
+        // STEP 1b — Corroboration: query recent SOS reports (last 10 min)
+        let source_count = 1;
+        let report_count = 1;
+        try {
+            const corrobResult = await pool.query(
+                `SELECT
+                   COUNT(*)::int                   AS report_count,
+                   COUNT(DISTINCT source)::int      AS source_count
+                 FROM sos_reports
+                 WHERE created_at >= NOW() - INTERVAL '10 minutes'`
+            );
+            const row = corrobResult.rows[0];
+            report_count = row.report_count || 1;
+            source_count = row.source_count || 1;
+        } catch (corrobErr) {
+            console.error('Corroboration query failed (non-fatal):', corrobErr.message);
+        }
+
+        // Boost confidence: +5% per additional distinct source, capped at 1.0
+        const boosted_confidence = Math.min(
+            1.0,
+            confidence + (source_count - 1) * 0.05
+        );
+
+        // Derive validation label
+        const validation = source_count >= 2 ? 'CROSS-VALIDATED' : 'SINGLE SOURCE';
+
+        console.log(`Alert corroboration: source_count:${source_count}, report_count:${report_count}, confidence:${confidence}→${boosted_confidence}, validation:'${validation}'`);
+
         // STEP 2 — Fire all broadcast channels concurrently
         const cellBroadcastPromise = new Promise((resolve) => {
             // Mock call to telecom API
@@ -92,9 +121,22 @@ router.post('/trigger', async (req, res) => {
 
         await Promise.all([cellBroadcastPromise, mqttPromise, pushPromise]);
 
+        // Build enriched payload for broadcast channels
+        const broadcastPayload = {
+            alert_id,
+            type,
+            confidence: boosted_confidence,
+            lat,
+            lng,
+            triggered_at,
+            source_count,
+            report_count,
+            validation
+        };
+
         // STEP 3 — Publish to Redis 'alert-broadcast' channel
         try {
-            await publish('alert-broadcast', { alert_id, type, confidence, lat, lng, triggered_at, metadata });
+            await publish('alert-broadcast', broadcastPayload);
         } catch (redisErr) {
             console.error('Redis alert-broadcast publish failed (non-fatal):', redisErr.message);
         }
@@ -102,7 +144,7 @@ router.post('/trigger', async (req, res) => {
         // STEP 4 — Emit WebSocket 'broadcast-alert' event
         try {
             const { getIO } = require('../../ws/socket');
-            getIO().emit('broadcast-alert', { alert_id, type, confidence, lat, lng, triggered_at, metadata });
+            getIO().emit('broadcast-alert', broadcastPayload);
         } catch (wsErr) {
             console.error('WebSocket emit failed (non-fatal):', wsErr.message);
         }
@@ -112,7 +154,10 @@ router.post('/trigger', async (req, res) => {
             broadcast: true,
             alert_id,
             type: alertRecord.threat_type,
-            confidence: alertRecord.confidence,
+            confidence: boosted_confidence,
+            source_count,
+            report_count,
+            validation,
             channels_fired: ['cell_broadcast', 'mqtt', 'websocket', 'push_notification'],
             triggered_at
         });
