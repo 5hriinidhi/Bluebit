@@ -100,7 +100,9 @@ class RedditCollector:
                     })
             except Exception as e:
                 logger.error(f"[REDDIT] {sub} error: {e}")
+                _update_source_health("reddit", ok=False)
         
+        _update_source_health("reddit", ok=True)
         logger.info(f"[REDDIT] Collected {len(posts)} new posts")
         return posts
 
@@ -192,6 +194,9 @@ class BlueskyCollector:
                     params={"q": kw, "limit": 10},
                     timeout=8,
                 )
+                if resp.status_code != 200:
+                    logger.warning(f"[BLUESKY] {kw} returned {resp.status_code}")
+                    continue
                 for post in resp.json().get("posts", []):
                     cid = post.get("cid", "")
                     if cid in self.seen_ids:
