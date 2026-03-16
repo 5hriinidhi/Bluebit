@@ -1,250 +1,160 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/api_service.dart';
-import '../services/shake_detector.dart';
 import '../services/sonic_cascade.dart';
-import '../constants/config.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  bool _connected = false;
-  String _locationText = 'Fetching location...';
-  double? _lat;
-  double? _lng;
-  bool _sosSubmitting = false;
-  String _lastStatus = 'Idle';
+class _HomeScreenState extends State<HomeScreen> {
+  bool _isOnline = false;
+  bool _locationEnabled = false;
+  bool _isSending = false;
+  
+  // Tracks which specific button is currently hitting the API
+  String? _activeStatusLoading; 
+  int? _lastSosId; 
+  
+  String _statusMessage = "Ready";
   Timer? _healthTimer;
-  late ShakeDetector _shakeDetector;
-  int? _lastSosId;
-  String? _replyingStatus;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    
-    // Load persisted SOS ID
-    _loadPersistedSosId();
-    // 1. Initialize and Start Background Service
-    _initForegroundTask().then((_) => _startService());
-    
-    // 2. Core App Logic
-    _fetchLocation();
-    _checkConnection();
-    _healthTimer = Timer.periodic(const Duration(seconds: 30), (_) => _checkConnection());
-    
-    // 3. Initialize Shake Detector for Zero-Touch
-    _shakeDetector = ShakeDetector(
-      onShake: () {
-        print('Physical Impact Detected!');
-        _triggerSos(Config.sourceZeroTouch);
-      }
-    );
-    _shakeDetector.startListening();
+    _loadPersistedState();
+    _initSystem();
+    // Heartbeat to monitor connection status to Railway
+    _healthTimer = Timer.periodic(const Duration(seconds: 30), (_) => _checkHealth());
   }
 
-  Future<void> _loadPersistedSosId() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedId = prefs.getInt('last_sos_id');
-      if (savedId != null && mounted) {
-        setState(() => _lastSosId = savedId);
-      }
-    } catch (e) {
-      print('Failed to load SOS ID: $e');
+  // Task 5C Persistence: Ensures buttons stay visible even if app restarts
+  Future<void> _loadPersistedState() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _lastSosId = prefs.getInt('last_sos_id');
+        if (_lastSosId != null) _statusMessage = "Last SOS: #$_lastSosId";
+      });
     }
+  }
+
+  Future<void> _persistSosId(int id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('last_sos_id', id);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _healthTimer?.cancel();
-    _shakeDetector.stopListening();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkConnection(); // Re-validate connectivity on resume
-    }
+  Future<void> _initSystem() async {
+    await _checkLocationPermission();
+    await _checkHealth();
+    
+    // Task 3b: Mesh Relay Listener
+    SonicCascade.startBleRelay((lat, lng, hop, id) => ApiService.submitSos(
+      lat: lat, 
+      lng: lng, 
+      message: "Mesh Relay (Hop $hop)", 
+      source: "sonic_cascade", 
+      metadata: {'relay_id': id}
+    ));
   }
 
-  Future<void> _initForegroundTask() async {
-    FlutterForegroundTask.init(
-      androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'distress_service',
-        channelName: 'DIST.RESS Protection',
-        channelDescription: 'Monitoring for physical impacts...',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
-      ),
-      iosNotificationOptions: const IOSNotificationOptions(),
-      foregroundTaskOptions: ForegroundTaskOptions(
-        autoRunOnBoot: true,
-        allowWakeLock: true,
-        allowWifiLock: true,
-        // This is the missing required parameter for v9.2.1
-        eventAction: ForegroundTaskEventAction.nothing(),
-      ),
-    );
-  }
-
-  Future<void> _startService() async {
-    if (await FlutterForegroundTask.isRunningService) return;
-
-    await FlutterForegroundTask.startService(
-      notificationTitle: 'DIST.RESS Active',
-      notificationText: 'Zero-Touch monitoring is running in background',
-    );
-  }
-
-  Future<void> _checkConnection() async {
-    try {
-      print('[HEALTH] Checking ${Config.backendUrl}/health ...');
-      final health = await ApiService.checkHealth();
-      print('[HEALTH] Response: $health');
-      setState(() => _connected = health['status'] == 'ok');
-    } catch (e) {
-      print('[HEALTH] Connection FAILED: $e');
-      setState(() => _connected = false);
-    }
-  }
-
-  Future<void> _fetchLocation() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      setState(() => _locationText = 'Location disabled — opening settings...');
-      serviceEnabled = await Geolocator.openLocationSettings();
-      if (!serviceEnabled) {
-        setState(() => _locationText = 'Location disabled');
-        return;
-      }
-    }
-
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        setState(() => _locationText = 'Location permission denied');
-        return;
-      }
-    }
-    if (permission == LocationPermission.deniedForever) {
-      setState(() => _locationText = 'Location permission denied — opening settings...');
-      await Geolocator.openAppSettings();
-      return;
-    }
-
-    try {
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+  Future<void> _checkHealth() async {
+    final h = await ApiService.checkBackendHealth();
+    if (mounted) {
       setState(() {
-        _lat = position.latitude;
-        _lng = position.longitude;
-        _locationText = '${_lat!.toStringAsFixed(4)}, ${_lng!.toStringAsFixed(4)}';
+        _isOnline = h;
+        _statusMessage = h ? "Grid Online" : "Grid Offline - Check Data";
       });
-    } catch (e) {
-      setState(() => _locationText = 'Location unavailable');
     }
   }
 
-  Future<void> _triggerSos(String source, {Map<String, dynamic>? metadata}) async {
-    if (_sosSubmitting) return;
+  Future<void> _checkLocationPermission() async {
+    bool enabled = await Geolocator.isLocationServiceEnabled();
+    LocationPermission p = await Geolocator.checkPermission();
+    if (p == LocationPermission.denied) p = await Geolocator.requestPermission();
+    if (mounted) {
+      setState(() => _locationEnabled = enabled && p != LocationPermission.deniedForever);
+    }
+  }
+
+  Future<void> _handleManualSos() async {
     setState(() {
-      _sosSubmitting = true;
-      _lastStatus = 'Sending $source SOS...';
+      _isSending = true;
+      _statusMessage = "Broadcasting Emergency...";
     });
-
     try {
-      String msg = (source == Config.sourceZeroTouch) 
-          ? Config.zeroTouchMessage 
-          : 'Emergency SOS triggered manually';
-
-      final response = await ApiService.submitSos(
-        lat: _lat ?? 0.0,
-        lng: _lng ?? 0.0,
-        message: msg,
-        source: source,
-        metadata: metadata,
+      Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final res = await ApiService.submitSos(
+        lat: pos.latitude, 
+        lng: pos.longitude, 
+        message: "Citizen SOS Triggered", 
+        source: "manual"
       );
       
-      if (response.containsKey('id')) {
-        _lastSosId = response['id'];
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setInt('last_sos_id', _lastSosId!);
-      }
-      
-      setState(() => _lastStatus = 'Success: $source sent');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$source SOS Sent Successfully!'), backgroundColor: Colors.green)
-        );
+      if (res != null && res['id'] != null) {
+        final id = res['id'];
+        await _persistSosId(id);
+        setState(() {
+          _lastSosId = id;
+          _statusMessage = "SOS Sent (ID: #$id)";
+        });
       }
     } catch (e) {
-      setState(() => _lastStatus = 'Failed to connect');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Network Error: Could not reach backend'), backgroundColor: Colors.red)
-        );
-      }
+      setState(() => _statusMessage = "Network Fail: SOS not sent");
     } finally {
-      setState(() => _sosSubmitting = false);
+      setState(() => _isSending = false);
     }
   }
 
-  void _onDevButtonPress() {
-    _triggerSos(Config.sourceZeroTouch, metadata: {'dev_triggered': true});
-  }
-
-  Widget _replyBtn(String label, Color color, String status) {
-    final isLoading = _replyingStatus == status;
+  // Two-Way Comms Button with Individual Loading
+  Widget _statusBtn(String label, Color color, String val) {
+    bool loading = _activeStatusLoading == val;
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: color,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            backgroundColor: color, 
+            foregroundColor: Colors.white, 
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            elevation: 2,
           ),
-          onPressed: (_lastSosId == null || _replyingStatus != null) ? null : () async {
-            setState(() => _replyingStatus = status);
-            try {
-              final success = await ApiService.post('/api/status', {
-                'sos_id': _lastSosId,
-                'status': status,
-              });
-              if (mounted && success != null) {
+          onPressed: (_lastSosId == null || _activeStatusLoading != null) ? null : () async {
+            setState(() => _activeStatusLoading = val);
+            
+            // "Shotgun" payload to ensure backend field matching
+            final ok = await ApiService.post('/api/status', {
+              'sos_id': _lastSosId,
+              'status': val,          // Requirement: 'safe', 'need rescue', 'medical'
+              'citizen_status': val   // Playbook variant
+            });
+            
+            if (mounted) {
+              setState(() => _activeStatusLoading = null);
+              if (ok != null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Sent: $label Status Reported"), backgroundColor: color),
+                  SnackBar(content: Text("Status Reported: $label"), backgroundColor: color)
                 );
-              } else if (mounted) {
+              } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Failed to send status"), backgroundColor: Colors.grey),
+                  const SnackBar(content: Text("Failed to report status"), backgroundColor: Colors.black)
                 );
               }
-            } catch (e) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error: $e"), backgroundColor: Colors.grey),
-                );
-              }
-            } finally {
-              if (mounted) setState(() => _replyingStatus = null);
             }
           },
-          child: isLoading
-              ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          child: loading 
+            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+            : Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
         ),
       ),
     );
@@ -254,110 +164,101 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            GestureDetector(
-              onLongPress: _onDevButtonPress,
-              child: const Text('DIST.RESS', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 24)),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: 12, height: 12,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _connected ? Colors.green : Colors.grey,
+        title: const Text("DIST.RESS", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        actions: [
+          Icon(Icons.circle, size: 12, color: _isOnline ? Colors.green : Colors.grey),
+          const SizedBox(width: 20)
+        ],
+      ),
+      // LayoutBuilder + SingleChildScrollView + IntrinsicHeight prevents the overflow error
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100], 
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: Colors.grey[300]!)
+                        ),
+                        child: Column(
+                          children: [
+                            Row(children: [
+                              Icon(Icons.gps_fixed, color: _locationEnabled ? Colors.green : Colors.red, size: 20),
+                              const SizedBox(width: 12),
+                              Text(_locationEnabled ? "GPS Locked" : "Location Error", style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ]),
+                            const Divider(height: 24),
+                            Row(children: [
+                              const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(_statusMessage, style: TextStyle(color: Colors.grey[800]))),
+                            ]),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      
+                      // Two-Way Communication Section (Task 5C)
+                      if (_lastSosId != null) ...[
+                        const Text("ARE YOU SAFE?", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          _statusBtn("SAFE", Colors.green, "safe"),
+                          _statusBtn("RESCUE", Colors.orange, "need rescue"),
+                          _statusBtn("MEDICAL", Colors.red, "medical"),
+                        ]),
+                        const SizedBox(height: 40),
+                      ],
+
+                      // Main Emergency Trigger
+                      SizedBox(
+                        width: double.infinity,
+                        height: 120,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red, 
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)), 
+                            elevation: 8
+                          ),
+                          onPressed: _isSending ? null : _handleManualSos,
+                          child: _isSending 
+                            ? const CircularProgressIndicator(color: Colors.white) 
+                            : const Text("SOS", style: TextStyle(fontSize: 45, color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(height: 25),
+                      
+                      // BLE Mesh Broadcast (Offline Channel)
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.bluetooth_searching), 
+                        label: const Text("BLE SOS BROADCAST"),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 60), 
+                          side: const BorderSide(color: Colors.red, width: 2), 
+                          foregroundColor: Colors.red,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                        onPressed: () async {
+                          Position p = await Geolocator.getCurrentPosition();
+                          SonicCascade.advertiseBleSos(p.latitude, p.longitude);
+                        },
+                      ),
+                      const SizedBox(height: 40),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                Text(_connected ? 'Live' : 'Offline', style: const TextStyle(fontSize: 14)),
-              ],
-            )
-          ],
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on, color: Colors.red),
-                        const SizedBox(width: 8),
-                        Text(_locationText, style: const TextStyle(fontSize: 16)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Icon(Icons.info, color: Colors.grey),
-                        const SizedBox(width: 8),
-                        Text('Status: $_lastStatus', style: const TextStyle(fontSize: 16)),
-                      ],
-                    ),
-                  ],
-                ),
               ),
             ),
-            const Spacer(),
-            if (_lastSosId != null) ...[
-              const Text("ARE YOU SAFE?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  _replyBtn('SAFE', Colors.green, 'safe'),
-                  _replyBtn('RESCUE', Colors.orange, 'need_rescue'),
-                  _replyBtn('MEDICAL', Colors.red, 'medical'),
-                ],
-              ),
-              const SizedBox(height: 30),
-            ],
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () => _triggerSos(Config.sourceManual), 
-              child: _sosSubmitting
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('SOS', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.red),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onPressed: (_sosSubmitting || _lat == null) ? null : () async {
-                setState(() => _sosSubmitting = true);
-                try {
-                  await SonicCascade.advertiseBleSos(_lat!, _lng!);
-                  
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('BLE SOS Broadcast Sent!'), backgroundColor: Colors.purple)
-                    );
-                  }
-                } catch (e) {
-                  print('BLE broadcast failed: $e');
-                } finally {
-                  setState(() => _sosSubmitting = false);
-                }
-              },
-              child: const Text('BLE SOS Broadcast', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
+          );
+        }
       ),
     );
   }

@@ -3,59 +3,61 @@ import 'package:http/http.dart' as http;
 import '../constants/config.dart';
 
 class ApiService {
-  static final _client = http.Client();
-  static String get _base => Config.backendUrl;
-
-  // POST /api/sos — returns the saved record with id
-  static Future<Map<String,dynamic>> submitSos({
+  // Existing submitSos method...
+  static Future<Map<String, dynamic>?> submitSos({
     required double lat,
     required double lng,
     required String message,
     required String source,
-    String? nodeId,
-    Map<String,dynamic>? metadata,
+    Map<String, dynamic>? metadata,
   }) async {
-    final body = {
-      'lat': lat,
-      'lng': lng,
-      'message': message,
-      'source': source,
-      'node_id': nodeId,       // send null when not iot_node
-      'metadata': metadata ?? {},
-    };
-    
-    final resp = await _client
-      .post(Uri.parse('$_base/api/sos'),
-            headers: {'Content-Type':'application/json'},
-            body: jsonEncode(body))
-      .timeout(const Duration(seconds: Config.apiTimeoutSeconds));
-      
-    if (resp.statusCode == 201) return jsonDecode(resp.body);
-    throw Exception('SOS submit failed: HTTP ${resp.statusCode} — ${resp.body}');
-  }
-
-  // GET /health — returns {status, db, redis}
-  static Future<Map<String,dynamic>> checkHealth() async {
-    final resp = await _client
-      .get(Uri.parse('$_base/health'))
-      .timeout(const Duration(seconds: 5));
-    return jsonDecode(resp.body);
-  }
-
-  // Generic POST for /api/status etc.
-  static Future<Map<String,dynamic>?> post(String endpoint, Map<String,dynamic> body) async {
     try {
-      final resp = await _client
-        .post(Uri.parse('$_base$endpoint'),
-              headers: {'Content-Type':'application/json'},
-              body: jsonEncode(body))
-        .timeout(const Duration(seconds: Config.apiTimeoutSeconds));
-      if (resp.statusCode == 200 || resp.statusCode == 201) {
-        return jsonDecode(resp.body);
+      final response = await http.post(
+        Uri.parse("${Config.backendUrl}/api/sos"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "lat": lat,
+          "lng": lng,
+          "message": message,
+          "source": source,
+          "metadata": metadata ?? {},
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
       }
+      return null;
     } catch (e) {
-      print('ApiService.post failed: $e');
+      return null;
     }
-    return null;
+  }
+
+  // NEW: Add this generic post method for Task 5C
+  static Future<Map<String, dynamic>?> post(String endpoint, Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse("${Config.backendUrl}$endpoint"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(data),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static Future<bool> checkBackendHealth() async {
+    try {
+      final response = await http.get(Uri.parse("${Config.backendUrl}/health"))
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
   }
 }

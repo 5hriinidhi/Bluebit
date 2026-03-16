@@ -19,7 +19,6 @@ void main() async {
         lng: lng,
         message: 'Relayed via BLE Mesh (hop $hop)',
         source: Config.sourceSonicCascade,
-        nodeId: null,
         metadata: {'relay': 'ble_mesh', 'hop': hop, 'relay_id': id},
       );
       debugPrint('[BLE] Relay to backend OK');

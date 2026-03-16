@@ -16,7 +16,7 @@ dependencies:
   geolocator: ^11.0.0             # GPS for lat/lng in SOS payload
   permission_handler: ^11.3.1     # runtime permission requests
   flutter_foreground_task: ^9.2.1 # Android foreground service + WAKE_LOCK
-  shared_preferences: ^2.2.2      # persist settings across restarts
+  shared_preferences: ^2.5.4      # persist settings across restarts
   flutter_blue_plus: ^2.2.1       # BLE advertising + scanning for Sonic Cascade
   
   # Firebase dependencies for Two-Way Push Notifications
