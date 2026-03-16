@@ -8,9 +8,37 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../../db/pool');
 const { publish } = require('../../redis/publisher');
+const admin = require('../../firebase.js');
 const http = require('http'); // For mock cell broadcast (or https if making real call)
 
 const VALID_TYPES = ['earthquake', 'flood', 'blast', 'fire', 'stampede'];
+
+/**
+ * Send FCM push notification to all devices subscribed to 'emergency-alerts' topic.
+ * Non-fatal — failures are caught and logged, never rethrown.
+ */
+async function sendFcm(alertData) {
+    try {
+        const response = await admin.messaging().send({
+            notification: {
+                title: `⚠ EMERGENCY: ${alertData.type.toUpperCase()} DETECTED`,
+                body: `Confidence: ${Math.round(alertData.confidence * 100)}%` +
+                      ` · ${new Date(alertData.triggered_at).toLocaleTimeString()}`,
+            },
+            data: {
+                alert_id: String(alertData.alert_id),
+                type:     alertData.type,
+                lat:      String(alertData.lat),
+                lng:      String(alertData.lng),
+            },
+            topic: 'emergency-alerts',
+        });
+        console.log('[FCM] Sent successfully:', response);
+    } catch (err) {
+        console.error('[FCM] Failed (non-fatal):', err.message);
+        // Do NOT rethrow — FCM failure must not block other broadcast channels
+    }
+}
 
 router.post('/trigger', async (req, res) => {
     const { type, confidence, lat, lng, source } = req.body;
@@ -87,40 +115,6 @@ router.post('/trigger', async (req, res) => {
 
         console.log(`Alert corroboration: source_count:${source_count}, report_count:${report_count}, confidence:${confidence}→${boosted_confidence}, validation:'${validation}'`);
 
-        // STEP 2 — Fire all broadcast channels concurrently
-        const cellBroadcastPromise = new Promise((resolve) => {
-            // Mock call to telecom API
-            const reqUrl = new URL('https://mock-cell-broadcast.example.com/broadcast');
-            const options = {
-                hostname: reqUrl.hostname,
-                path: reqUrl.pathname,
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            };
-            const req = require('https').request(options, (res) => {
-                resolve('cell_broadcast_ok');
-            });
-            req.on('error', (e) => {
-                console.error(`Cell Broadcast API failed (non-fatal): ${e.message}`);
-                resolve('cell_broadcast_failed_but_continue');
-            });
-            req.write(JSON.stringify({ type, lat, lng }));
-            req.end();
-            setTimeout(() => resolve('cell_broadcast_timeout'), 2000); // safety timeout
-        });
-
-        const mqttPromise = new Promise((resolve) => {
-            console.log(`MQTT broadcast fired: ${type} at ${lat},${lng}`);
-            resolve('mqtt_ok');
-        });
-
-        const pushPromise = new Promise((resolve) => {
-            console.log(`Push notification fired to all devices: ${type}`);
-            resolve('push_ok');
-        });
-
-        await Promise.all([cellBroadcastPromise, mqttPromise, pushPromise]);
-
         // Build enriched payload for broadcast channels
         const broadcastPayload = {
             alert_id,
@@ -134,20 +128,23 @@ router.post('/trigger', async (req, res) => {
             validation
         };
 
-        // STEP 3 — Publish to Redis 'alert-broadcast' channel
-        try {
-            await publish('alert-broadcast', broadcastPayload);
-        } catch (redisErr) {
-            console.error('Redis alert-broadcast publish failed (non-fatal):', redisErr.message);
-        }
+        // STEP 2 — Fire all broadcast channels concurrently (all non-fatal)
+        const channelNames = ['redis', 'websocket', 'fcm'];
+        const results = await Promise.allSettled([
+            publish('alert-broadcast', broadcastPayload),
+            (async () => {
+                const { getIO } = require('../../ws/socket');
+                getIO().emit('broadcast-alert', broadcastPayload);
+            })(),
+            sendFcm(broadcastPayload),
+        ]);
 
-        // STEP 4 — Emit WebSocket 'broadcast-alert' event
-        try {
-            const { getIO } = require('../../ws/socket');
-            getIO().emit('broadcast-alert', broadcastPayload);
-        } catch (wsErr) {
-            console.error('WebSocket emit failed (non-fatal):', wsErr.message);
-        }
+        // Log any settled failures for debugging
+        results.forEach((r, i) => {
+            if (r.status === 'rejected') {
+                console.error(`[BROADCAST] Channel ${channelNames[i]} failed:`, r.reason?.message);
+            }
+        });
 
         // ── Final 200 Response ──────────────────────────────────
         return res.status(200).json({
@@ -158,7 +155,7 @@ router.post('/trigger', async (req, res) => {
             source_count,
             report_count,
             validation,
-            channels_fired: ['cell_broadcast', 'mqtt', 'websocket', 'push_notification'],
+            channels_fired: ['redis', 'websocket', 'fcm'],
             triggered_at
         });
 
