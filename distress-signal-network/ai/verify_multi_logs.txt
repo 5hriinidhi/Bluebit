@@ -1,0 +1,136 @@
+2026-03-16 10:56:49,296 | distress.monitor         | INFO    | [INIT]  Reddit monitor started (subs: DisasterUpdate, worldnews, news, collapse, flooding, earthquake, india, poll 2s, threshold 0.85)
+2026-03-16 10:56:49,297 | distress.monitor         | INFO    | [INIT]  Starting 24h backfill...
+2026-03-16 10:57:12,057 | distress.collectors      | INFO    | [REDDIT] Collected 196 new posts
+2026-03-16 10:57:12,060 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,060 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:12,060 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:12,060 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:12,062 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,062 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: flood at 0.82
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,063 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: fire at 0.84
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:12,064 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:12,065 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:12,065 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,065 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:12,065 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,065 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,065 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:12,065 | distress.monitor         | WARNING | [ALERT]  Threat detected!  type=fire  conf=0.89  kws=['wildfire', 'fire']
+2026-03-16 10:57:12,404 | distress.monitor         | INFO    | [STOP]  Social-media monitor stopping.
+2026-03-16 10:57:14,415 | distress.routing         | WARNING | [WARN]  POST http://localhost:3001/api/alert/trigger failed:  (attempt 1/2)
+2026-03-16 10:57:16,453 | distress.routing         | WARNING | [WARN]  POST http://localhost:3001/api/alert/trigger failed:  (attempt 2/2)
+2026-03-16 10:57:16,454 | distress.routing         | ERROR   | [FAIL]  POST http://localhost:3001/api/alert/trigger failed after 2 attempts
+2026-03-16 10:57:16,455 | distress.routing         | WARNING | [ALERT-CB]  POST failed for type=fire
+2026-03-16 10:57:16,455 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:16,455 | distress.monitor         | WARNING | [ALERT]  Threat detected!  type=fire  conf=0.89  kws=['wildfire', 'fire']
+2026-03-16 10:57:18,490 | distress.routing         | WARNING | [WARN]  POST http://localhost:3001/api/alert/trigger failed:  (attempt 1/2)
+2026-03-16 10:57:20,523 | distress.routing         | WARNING | [WARN]  POST http://localhost:3001/api/alert/trigger failed:  (attempt 2/2)
+2026-03-16 10:57:20,523 | distress.routing         | ERROR   | [FAIL]  POST http://localhost:3001/api/alert/trigger failed after 2 attempts
+2026-03-16 10:57:20,524 | distress.routing         | WARNING | [ALERT-CB]  POST failed for type=fire
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,525 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: flood at 0.82
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,526 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: blast at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,527 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:20,528 | distress.monitor         | INFO    | monitoring: blast at 0.77
+2026-03-16 10:57:20,528 | distress.monitor         | INFO    | monitoring: blast at 0.77
+2026-03-16 10:57:20,529 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:20,529 | distress.monitor         | INFO    | monitoring: fire at 0.84
+2026-03-16 10:57:20,529 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:20,529 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:20,529 | distress.monitor         | WARNING | [ALERT]  Threat detected!  type=flood  conf=0.91  kws=['flooding', 'water level', 'flood']
+2026-03-16 10:57:22,564 | distress.routing         | WARNING | [WARN]  POST http://localhost:3001/api/alert/trigger failed:  (attempt 1/2)
+2026-03-16 10:57:24,581 | distress.routing         | WARNING | [WARN]  POST http://localhost:3001/api/alert/trigger failed:  (attempt 2/2)
+2026-03-16 10:57:24,581 | distress.routing         | ERROR   | [FAIL]  POST http://localhost:3001/api/alert/trigger failed after 2 attempts
+2026-03-16 10:57:24,583 | distress.routing         | WARNING | [ALERT-CB]  POST failed for type=flood
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.82
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,583 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.77
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,585 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,587 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,587 | distress.monitor         | INFO    | monitoring: earthquake at 0.84
+2026-03-16 10:57:24,587 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:57:24,587 | distress.monitor         | INFO    | [INIT]  Backfill complete.

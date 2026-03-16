@@ -1,0 +1,8 @@
+2026-03-16 10:45:29,928 | distress.monitor         | INFO    | [INIT]  Reddit monitor started (r/DisasterUpdate, poll 2s, threshold 0.85)
+2026-03-16 10:45:29,928 | distress.monitor         | INFO    | [INIT]  Starting 24h backfill...
+2026-03-16 10:45:38,636 | distress.collectors      | INFO    | Backfilled 3 posts from the last 24h.
+2026-03-16 10:45:38,636 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:45:38,636 | distress.monitor         | INFO    | [INIT]  Backfill complete.
+2026-03-16 10:45:43,312 | distress.monitor         | INFO    | monitoring: flood at 0.84
+2026-03-16 10:45:43,314 | distress.monitor         | INFO    | monitoring: fire at 0.77
+2026-03-16 10:45:43,314 | distress.monitor         | INFO    | [STOP]  Social-media monitor stopping.

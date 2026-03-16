@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     alert_confidence_threshold: float = 0.85
     monitor_interval_seconds: int = 30       # configurable via env
 
+    # ── External APIs ────────────────────────────────────────
+    owm_key: str = ""
+    ai_service_url: str = ""
+
     # ── Server ───────────────────────────────────────────────
     host: str = "0.0.0.0"
     port: int = 8001

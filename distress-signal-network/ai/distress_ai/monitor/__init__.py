@@ -31,8 +31,10 @@ from distress_ai.config import settings
 from distress_ai.models import AlertPayload
 from distress_ai.routing import post_alert_trigger
 from distress_ai.subscriber import is_on_cooldown
+from .collectors import RedditCollector, REDDIT_SUBREDDITS
 
 logger = logging.getLogger("distress.monitor")
+collector = RedditCollector()
 
 # ── Threat keyword dictionaries ─────────────────────────
 # Map each threat type enum to detection keywords.
@@ -127,59 +129,70 @@ _running = False
 
 async def monitor_loop() -> None:
     """
-    Async background task: polls the simulated feed at the configured
+    Async background task: polls Reddit at the configured
     interval and fires POST /api/alert/trigger when confidence >= 0.85.
     """
     global _running
     _running = True
     logger.info(
-        "[INIT]  Social-media monitor started  (poll every %ds, threshold %.2f)",
+        "[INIT]  Reddit monitor started (subs: %s, poll %ds, threshold %.2f)",
+        ", ".join(REDDIT_SUBREDDITS),
         settings.monitor_interval_seconds,
         settings.alert_confidence_threshold,
     )
 
+    # --- 24h Backfill / Demo Mode ---
+    logger.info("[INIT]  Starting 24h backfill...")
+    backfill_posts = collector.fetch_backfill_24h()
+    for post in backfill_posts:
+        await _process_post(post)
+    logger.info("[INIT]  Backfill complete.")
+
     while _running:
         try:
-            # Pick a random subset from the simulated feed
-            batch = random.sample(
-                _SIMULATED_POSTS, k=min(3, len(_SIMULATED_POSTS))
-            )
+            # Fetch latest from Reddit
+            batch = collector.fetch_latest(limit=5)
 
             for post in batch:
-                threat_type, confidence, kws = _score_post(post["text"])
-
-                if confidence < settings.alert_confidence_threshold:
-                    if confidence > 0:
-                        logger.info(
-                            "monitoring: %s at %.2f", threat_type, confidence,
-                        )
-                    continue
-
-                # confidence >= 0.85 — check cooldown before calling backend
-                if is_on_cooldown(threat_type):
-                    logger.info(
-                        "[SKIP]  %s on cooldown, suppressing alert (conf=%.2f)",
-                        threat_type, confidence,
-                    )
-                    continue
-
-                logger.warning(
-                    "[ALERT]  Threat detected!  type=%s  conf=%.2f  kws=%s",
-                    threat_type, confidence, kws,
-                )
-                payload = AlertPayload(
-                    type=threat_type,
-                    confidence=confidence,
-                    lat=post["lat"],
-                    lng=post["lng"],
-                    source="nlp",
-                )
-                await post_alert_trigger(payload)
+                await _process_post(post)
 
         except Exception:
-            logger.exception("[FAIL]  Error in social-media monitor cycle")
+            logger.exception("[FAIL]  Error in Reddit monitor cycle")
 
         await asyncio.sleep(settings.monitor_interval_seconds)
+
+
+async def _process_post(post: Dict) -> None:
+    """Helper to score and trigger alerts for a single post."""
+    threat_type, confidence, kws = _score_post(post["text"])
+
+    if confidence < settings.alert_confidence_threshold:
+        if confidence > 0:
+            logger.info(
+                "monitoring: %s at %.2f", threat_type, confidence,
+            )
+        return
+
+    # confidence >= 0.85 — check cooldown before calling backend
+    if is_on_cooldown(threat_type):
+        logger.info(
+            "[SKIP]  %s on cooldown, suppressing alert (conf=%.2f)",
+            threat_type, confidence,
+        )
+        return
+
+    logger.warning(
+        "[ALERT]  Threat detected!  type=%s  conf=%.2f  kws=%s",
+        threat_type, confidence, kws,
+    )
+    payload = AlertPayload(
+        type=threat_type,
+        confidence=confidence,
+        lat=post["lat"],
+        lng=post["lng"],
+        source="nlp",
+    )
+    await post_alert_trigger(payload)
 
 
 def stop_monitor() -> None:
