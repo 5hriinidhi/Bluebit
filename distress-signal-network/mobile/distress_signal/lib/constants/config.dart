@@ -1,6 +1,6 @@
 class Config {
   // Backend URL — UPDATE THIS when ngrok/Railway URL changes
-  static const String backendUrl = 'https://tempestuous-cleopatra-scabbily.ngrok-free.dev';
+  static const String backendUrl = 'https://bluebit-production.up.railway.app';
 
   // Source enum strings — MUST match api-contract.json exactly
   // Use ONLY these strings. Never modify them.
@@ -8,7 +8,7 @@ class Config {
   static const String sourceZeroTouch    = 'zero-touch';
   static const String sourceIotNode      = 'iot_node';
   static const String sourceSonicCascade = 'sonic_cascade';
-
+  
   // Zero-Touch thresholds
   static const double shakeThresholdG     = 2.7;  // g-force trigger
   static const int    shakeCooldownMs      = 5000; // ms between triggers

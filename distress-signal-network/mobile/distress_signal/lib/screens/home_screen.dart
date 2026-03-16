@@ -83,9 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkConnection() async {
     try {
+      print('[HEALTH] Checking ${Config.backendUrl}/health ...');
       final health = await ApiService.checkHealth();
+      print('[HEALTH] Response: $health');
       setState(() => _connected = health['status'] == 'ok');
     } catch (e) {
+      print('[HEALTH] Connection FAILED: $e');
       setState(() => _connected = false);
     }
   }
@@ -93,16 +96,27 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      setState(() => _locationText = 'Location disabled');
-      return;
+      setState(() => _locationText = 'Location disabled — opening settings...');
+      serviceEnabled = await Geolocator.openLocationSettings();
+      if (!serviceEnabled) {
+        setState(() => _locationText = 'Location disabled');
+        return;
+      }
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return;
+      if (permission == LocationPermission.denied) {
+        setState(() => _locationText = 'Location permission denied');
+        return;
+      }
     }
-    if (permission == LocationPermission.deniedForever) return;
+    if (permission == LocationPermission.deniedForever) {
+      setState(() => _locationText = 'Location permission denied — opening settings...');
+      await Geolocator.openAppSettings();
+      return;
+    }
 
     try {
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
@@ -237,21 +251,20 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: (_sosSubmitting || _lat == null) ? null : () async {
                 setState(() => _sosSubmitting = true);
                 try {
-                  String mockSignal = '{"lat": $_lat, "lng": $_lng}';
-                  await SonicCascadeService.relayReceivedSignal(mockSignal);
+                  await SonicCascade.advertiseBleSos(_lat!, _lng!);
                   
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Sonic Cascade Relay Successful!'), backgroundColor: Colors.purple)
+                      const SnackBar(content: Text('BLE SOS Broadcast Sent!'), backgroundColor: Colors.purple)
                     );
                   }
                 } catch (e) {
-                  print('Relay failed: $e');
+                  print('BLE broadcast failed: $e');
                 } finally {
                   setState(() => _sosSubmitting = false);
                 }
               },
-              child: const Text('Simulate Sonic Relay', style: TextStyle(color: Colors.red)),
+              child: const Text('BLE SOS Broadcast', style: TextStyle(color: Colors.red)),
             ),
           ],
         ),
